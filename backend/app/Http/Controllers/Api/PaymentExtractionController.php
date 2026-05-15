@@ -4,26 +4,30 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Extractions\PaymentExtractionRequest;
-use App\Services\Extractions\MockPaymentExtractionService;
-use App\Services\Payments\Mpesa\PhoneNumberFormatter;
+use App\Services\Extractions\PaymentExtractionService;
 use Illuminate\Http\JsonResponse;
+use Throwable;
 
 class PaymentExtractionController extends Controller
 {
-    public function __construct(
-        private readonly MockPaymentExtractionService $mockPaymentExtractionService,
-        private readonly PhoneNumberFormatter $phoneNumberFormatter,
-    ) {
+    public function __construct(private readonly PaymentExtractionService $paymentExtractionService)
+    {
     }
 
     public function store(PaymentExtractionRequest $request): JsonResponse
     {
-        $payload = $request->validated();
-        $details = $this->mockPaymentExtractionService->extract();
+        try {
+            $details = $this->paymentExtractionService->extract($request->extractionPayload());
+        } catch (Throwable $exception) {
+            report($exception);
 
-        $phoneNumber = isset($payload['phone_number'])
-            ? $this->phoneNumberFormatter->normalize((string) $payload['phone_number'])
-            : null;
+            return response()->json([
+                'success' => false,
+                'error' => [
+                    'message' => $exception->getMessage(),
+                ],
+            ], 422);
+        }
 
         return response()->json([
             'success' => true,
@@ -36,8 +40,11 @@ class PaymentExtractionController extends Controller
                     'merchant_name' => $details->merchantName,
                 ],
                 'amount' => $details->amount,
-                'phone_number' => $phoneNumber,
+                'currency' => $details->currency,
+                'phone_number' => $details->phoneNumber,
                 'confidence' => $details->confidence,
+                'missing_fields' => $details->missingFields,
+                'warnings' => $details->warnings,
             ],
         ]);
     }

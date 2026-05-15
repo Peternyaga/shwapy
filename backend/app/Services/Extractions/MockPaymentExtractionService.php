@@ -4,9 +4,12 @@ namespace App\Services\Extractions;
 
 use App\DTOs\PaymentDetailsDTO;
 
-class MockPaymentExtractionService
+class MockPaymentExtractionService implements PaymentExtractionService
 {
-    public function extract(): PaymentDetailsDTO
+    /**
+     * @param array<string, mixed> $payload
+     */
+    public function extract(array $payload = []): PaymentDetailsDTO
     {
         return PaymentDetailsDTO::fromArray([
             'type' => 'paybill',
@@ -15,7 +18,11 @@ class MockPaymentExtractionService
             'till_no' => null,
             'merchant_name' => 'Kenya Power',
             'amount' => 3500,
+            'currency' => 'KES',
+            'phone_number' => $payload['phone_number'] ?? null,
             'confidence' => 0.93,
+            'missing_fields' => [],
+            'warnings' => [],
         ]);
     }
 }

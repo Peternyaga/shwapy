@@ -44,4 +44,14 @@ return [
         'callback_url' => env('MPESA_CALLBACK_URL'),
     ],
 
+    'gemini' => [
+        'api_key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
+        'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
+        'timeout' => env('GEMINI_TIMEOUT', 8),
+        'file_timeout' => env('GEMINI_FILE_TIMEOUT', 15),
+        'connect_timeout' => env('GEMINI_CONNECT_TIMEOUT', 2),
+        'max_file_bytes' => env('GEMINI_MAX_FILE_BYTES', 3 * 1024 * 1024),
+    ],
+
 ];

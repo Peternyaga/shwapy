@@ -80,8 +80,6 @@ class MpesaStkPushService
             throw new RuntimeException('Invalid STK response payload.');
         }
 
-        return $payload;
-
         return $result;
     }
 }
