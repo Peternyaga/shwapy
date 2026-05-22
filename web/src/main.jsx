@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import './styles.css';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||'http://192.168.100.224' ||'http://localhost';
 
 const emptyPaymentAccount = {
   type: 'till',

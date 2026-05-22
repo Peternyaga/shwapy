@@ -52,6 +52,15 @@ return [
         'file_timeout' => env('GEMINI_FILE_TIMEOUT', 15),
         'connect_timeout' => env('GEMINI_CONNECT_TIMEOUT', 2),
         'max_file_bytes' => env('GEMINI_MAX_FILE_BYTES', 3 * 1024 * 1024),
+        'mobile_key_ttl' => env('GEMINI_MOBILE_KEY_TTL', 600),
+        'mobile_encryption_secret' => env('GEMINI_MOBILE_ENCRYPTION_SECRET'),
+    ],
+
+    'google' => [
+        'client_ids' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('GOOGLE_CLIENT_IDS', ''))
+        ))),
     ],
 
 ];
