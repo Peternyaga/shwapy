@@ -46,9 +46,9 @@ class SecureSessionStore {
   }
 
   Future<void> clear() async {
-    final deviceId = await deviceId();
+    final currentDeviceId = await deviceId();
     await _storage.deleteAll();
-    await _storage.write(key: _deviceId, value: deviceId);
+    await _storage.write(key: _deviceId, value: currentDeviceId);
   }
 
   Future<String> deviceId() async {

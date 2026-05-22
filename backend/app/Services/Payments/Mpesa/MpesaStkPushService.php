@@ -19,7 +19,6 @@ class MpesaStkPushService
     public function initiate(Transaction $transaction, PaymentAccount $paymentAccount, string $phoneNumber, float $amount): array
     {
         $token = $this->mpesaAuthService->getAccessToken();
-
         $timestamp = now()->format('YmdHis');
         $shortCode = (string) config('services.mpesa.shortcode');
         $passkey = (string) config('services.mpesa.passkey');

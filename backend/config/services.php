@@ -37,10 +37,18 @@ return [
 
     'mpesa' => [
         'env' => env('MPESA_ENV', 'sandbox'),
-        'consumer_key' => env('MPESA_CONSUMER_KEY'),
-        'consumer_secret' => env('MPESA_CONSUMER_SECRET'),
-        'shortcode' => env('MPESA_SHORTCODE'),
-        'passkey' => env('MPESA_PASSKEY'),
+        'consumer_key' => env('MPESA_ENV') === 'live'
+            ? env('MPESA_CONSUMER_KEY')
+            : env('MPESA_CONSUMER_KEY_SANDBOX'),
+        'consumer_secret' => env('MPESA_ENV') === 'live'
+            ? env('MPESA_CONSUMER_SECRET')
+            : env('MPESA_CONSUMER_SECRET_SANDBOX'),
+        'shortcode' => env('MPESA_ENV') === 'live'
+            ? env('MPESA_SHORTCODE')
+            : env('MPESA_SHORTCODE_SANDBOX'),
+        'passkey' => env('MPESA_ENV') === 'live'
+            ? env('MPESA_PASSKEY')
+            : env('MPESA_PASSKEY_SANDBOX'),
         'callback_url' => env('MPESA_CALLBACK_URL'),
     ],
 

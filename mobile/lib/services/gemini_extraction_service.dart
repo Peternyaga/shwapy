@@ -43,7 +43,25 @@ class GeminiExtractionService {
     }
   }
 
-  Map<String, Object?> _geminiPayload(PreparedImage image, String? phoneNumber) {
+  Future<PaymentDetails> extractText({
+    required AuthSession session,
+    required String content,
+    String? phoneNumber,
+  }) async {
+    final response = await _api.dio.post('/extractions/payment', data: {
+      'type': 'text',
+      'content': content,
+      if (phoneNumber != null && phoneNumber.trim().isNotEmpty)
+        'phone_number': phoneNumber.trim(),
+    });
+
+    return PaymentDetails.fromJson(
+      Map<String, dynamic>.from(response.data['data'] as Map),
+    );
+  }
+
+  Map<String, Object?> _geminiPayload(
+      PreparedImage image, String? phoneNumber) {
     return {
       'contents': [
         {
