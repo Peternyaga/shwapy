@@ -325,7 +325,7 @@ class _ShwapyColors {
 
 enum _DashboardTab { home, history }
 
-enum _PaymentStage { dashboard, scan, confirm, processing, success }
+enum _PaymentStage { dashboard, scan, paste, confirm, processing, success }
 
 class _DashboardScreen extends StatefulWidget {
   const _DashboardScreen({
@@ -364,57 +364,17 @@ class _DashboardScreenState extends State<_DashboardScreen> {
     });
   }
 
-  Future<void> _pasteText() async {
-    final controller = TextEditingController();
-    final content = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            18,
-            20,
-            MediaQuery.of(context).viewInsets.bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Paste payment details',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                minLines: 5,
-                maxLines: 8,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: 'Payment text'),
-              ),
-              const SizedBox(height: 14),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(controller.text),
-                child: const Text('Extract details'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    controller.dispose();
+  void _openPaste() {
+    setState(() {
+      _stage = _PaymentStage.paste;
+      _error = null;
+    });
+  }
 
-    if (content == null || content.trim().isEmpty) {
-      return;
-    }
-
-    await Future<void>.delayed(const Duration(milliseconds: 180));
-    if (!mounted) {
+  Future<void> _extractPastedText(String content) async {
+    final value = content.trim();
+    if (value.isEmpty) {
+      setState(() => _error = 'Paste payment details before extracting.');
       return;
     }
 
@@ -426,7 +386,7 @@ class _DashboardScreenState extends State<_DashboardScreen> {
     try {
       final details = await widget.extraction.extractText(
         session: widget.session,
-        content: content.trim(),
+        content: value,
         phoneNumber: widget.session.user.phoneNumber,
       );
       _review(details);
@@ -546,6 +506,13 @@ class _DashboardScreenState extends State<_DashboardScreen> {
           onBack: _backHome,
           onExtracted: _review,
         );
+      case _PaymentStage.paste:
+        return _PasteTextScreen(
+          busy: _busy,
+          error: _error,
+          onBack: _backHome,
+          onExtract: _extractPastedText,
+        );
       case _PaymentStage.confirm:
         return _ConfirmPaymentScreen(
           draft: _draft!,
@@ -577,7 +544,7 @@ class _DashboardScreenState extends State<_DashboardScreen> {
                     busy: _busy,
                     error: _error,
                     onScan: _openScan,
-                    onPaste: _pasteText,
+                    onPaste: _openPaste,
                     onManualPaybill: () => _manualPayment('paybill'),
                     onManualTill: () => _manualPayment('till'),
                     onProfile: _showProfile,
@@ -981,6 +948,105 @@ class _CropPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _CropPainter oldDelegate) {
     return oldDelegate.rect != rect;
+  }
+}
+
+class _PasteTextScreen extends StatefulWidget {
+  const _PasteTextScreen({
+    required this.busy,
+    required this.error,
+    required this.onBack,
+    required this.onExtract,
+  });
+
+  final bool busy;
+  final String? error;
+  final VoidCallback onBack;
+  final ValueChanged<String> onExtract;
+
+  @override
+  State<_PasteTextScreen> createState() => _PasteTextScreenState();
+}
+
+class _PasteTextScreenState extends State<_PasteTextScreen> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Paste Payment Details'),
+        leading: IconButton(
+          tooltip: 'Back',
+          onPressed: widget.onBack,
+          icon: const Icon(Icons.arrow_back),
+        ),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: _cardDecoration(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Payment text',
+                    style: TextStyle(
+                      color: _ShwapyColors.text,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _controller,
+                    minLines: 8,
+                    maxLines: 12,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      alignLabelWithHint: true,
+                      labelText: 'Paste bill or message',
+                    ),
+                  ),
+                  if (widget.error != null) ...[
+                    const SizedBox(height: 12),
+                    _InlineWarning(message: widget.error!, danger: true),
+                  ],
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: widget.busy
+                        ? null
+                        : () => widget.onExtract(_controller.text),
+                    icon: widget.busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.auto_fix_high),
+                    label: Text(
+                      widget.busy ? 'Extracting details...' : 'Extract details',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
