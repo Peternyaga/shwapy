@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\MobileLlmCredentialController;
 use App\Http\Controllers\Api\MpesaCallbackController;
 use App\Http\Controllers\Api\PaymentExtractionController;
+use App\Http\Controllers\Api\TransactionController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function (): void {
@@ -20,6 +21,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('llm/session-key', [MobileLlmCredentialController::class, 'show'])
         ->middleware('throttle:30,1');
     Route::post('payments/checkout', [CheckoutController::class, 'store']);
+    Route::get('payments', [TransactionController::class, 'index']);
+    Route::get('payments/{transaction}', [TransactionController::class, 'show']);
 });
 
 Route::post('payments/callback', [MpesaCallbackController::class, 'store']);

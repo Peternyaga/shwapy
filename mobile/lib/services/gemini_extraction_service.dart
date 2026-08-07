@@ -81,8 +81,9 @@ class GeminiExtractionService {
       ],
       'generationConfig': {
         'temperature': 0,
-        'maxOutputTokens': 1024,
+        'maxOutputTokens': 768,
         'responseMimeType': 'application/json',
+        'responseSchema': _responseSchema,
       },
     };
   }
@@ -153,3 +154,47 @@ Return one compact JSON object only:
 
 Use KES unless another currency is explicitly shown. Keep numeric identifiers as strings. For labels such as BUY GOODS, TILL NO, TILL NUMBER, or LIPA NA M-PESA BUY GOODS, classify as till and extract the nearby digits as till_no.
 ''';
+
+const _responseSchema = {
+  'type': 'object',
+  'properties': {
+    'payment_account': {
+      'type': 'object',
+      'properties': {
+        'type': {'type': 'string', 'enum': ['paybill', 'till', 'unknown']},
+        'paybill_no': {'type': 'string', 'nullable': true},
+        'account_no': {'type': 'string', 'nullable': true},
+        'till_no': {'type': 'string', 'nullable': true},
+        'merchant_name': {'type': 'string', 'nullable': true},
+      },
+      'required': [
+        'type',
+        'paybill_no',
+        'account_no',
+        'till_no',
+        'merchant_name',
+      ],
+    },
+    'amount': {'type': 'number', 'nullable': true},
+    'currency': {'type': 'string'},
+    'phone_number': {'type': 'string', 'nullable': true},
+    'confidence': {'type': 'number'},
+    'missing_fields': {
+      'type': 'array',
+      'items': {'type': 'string'},
+    },
+    'warnings': {
+      'type': 'array',
+      'items': {'type': 'string'},
+    },
+  },
+  'required': [
+    'payment_account',
+    'amount',
+    'currency',
+    'phone_number',
+    'confidence',
+    'missing_fields',
+    'warnings',
+  ],
+};

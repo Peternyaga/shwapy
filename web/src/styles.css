@@ -200,6 +200,21 @@ h2 {
   width: 100%;
 }
 
+.review-panel .field {
+  background: #f7faf6;
+  border: 1px solid #e0e8df;
+  border-radius: 10px;
+  gap: 5px;
+  padding: 10px 12px 12px;
+}
+
+.review-panel .field input {
+  background: #ffffff;
+  border-color: #cbd8cc;
+  font-weight: 700;
+  min-height: 46px;
+}
+
 .field textarea {
   line-height: 1.45;
   resize: vertical;
@@ -341,6 +356,95 @@ h2 {
   padding: 14px 16px;
 }
 
+.checkout-result.status-failed,
+.checkout-result.status-cancelled,
+.checkout-result.status-timeout {
+  border-color: #efc8c2;
+  color: #9b2b1f;
+}
+
+.history-panel {
+  background: #ffffff;
+  border: 1px solid #dfe7df;
+  border-radius: 8px;
+  margin: 18px auto 0;
+  max-width: 1280px;
+  padding: 18px;
+}
+
+.history-panel .panel-heading {
+  margin-bottom: 12px;
+}
+
+.live-pill {
+  background: #e6f7ed;
+  border-radius: 999px;
+  color: #17643b;
+  font-size: 0.7rem;
+  font-weight: 800;
+  margin-left: auto;
+  padding: 4px 8px;
+  text-transform: uppercase;
+}
+
+.history-empty {
+  color: #66796e;
+  margin: 0;
+}
+
+.history-list {
+  display: grid;
+  gap: 8px;
+}
+
+.history-item {
+  align-items: center;
+  border: 1px solid #e0e8df;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.history-item > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.history-item span {
+  color: #66796e;
+  font-size: 0.8rem;
+}
+
+.history-amount {
+  align-items: flex-end;
+}
+
+.payment-status {
+  border-radius: 999px;
+  font-weight: 800;
+  padding: 3px 8px;
+}
+
+.payment-status.status-success {
+  background: #e6f7ed;
+  color: #17643b;
+}
+
+.payment-status.status-pending,
+.payment-status.status-processing {
+  background: #fff4df;
+  color: #7a4e0d;
+}
+
+.payment-status.status-failed,
+.payment-status.status-cancelled,
+.payment-status.status-timeout {
+  background: #ffe9e5;
+  color: #9b2b1f;
+}
+
 .spin {
   animation: spin 0.75s linear infinite;
 }
@@ -383,5 +487,10 @@ h2 {
 
   .token-state {
     width: 100%;
+  }
+
+  .history-item {
+    align-items: flex-start;
+    gap: 10px;
   }
 }

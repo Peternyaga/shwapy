@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
@@ -354,8 +355,70 @@ class _DashboardScreenState extends State<_DashboardScreen> {
   String? _error;
   bool _busy = false;
   String? _profileImagePath;
+  Timer? _historyTimer;
 
   final List<_RecentPayment> _recent = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+    _historyTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _loadHistory(showError: false),
+    );
+  }
+
+  @override
+  void dispose() {
+    _historyTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadHistory({bool showError = true}) async {
+    try {
+      final response = await widget.api.dio.get('/payments');
+      final items = (response.data['data'] as List? ?? const [])
+          .whereType<Map>()
+          .map((item) => _RecentPayment.fromJson(
+                Map<String, dynamic>.from(item),
+              ))
+          .toList();
+
+      _CheckoutResult? refreshedResult;
+      final activeId = _checkoutResult?.transactionId;
+      if (activeId != null) {
+        for (final item in items) {
+          if (item.id.toString() == activeId.toString()) {
+            refreshedResult = _CheckoutResult(
+              transactionId: item.id,
+              status: item.status,
+              message: item.resultDescription ?? _checkoutResult!.message,
+            );
+            break;
+          }
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _recent
+          ..clear()
+          ..addAll(items);
+        if (refreshedResult != null) {
+          _checkoutResult = refreshedResult;
+          if (refreshedResult.status == 'success' &&
+              _stage == _PaymentStage.processing) {
+            _stage = _PaymentStage.success;
+          }
+        }
+      });
+    } catch (error) {
+      if (showError && mounted) {
+        setState(() => _error = widget.api.messageFor(error));
+      }
+    }
+  }
 
   void _openScan() {
     setState(() {
@@ -472,8 +535,8 @@ class _DashboardScreenState extends State<_DashboardScreen> {
         _draft = draft;
         _checkoutResult = result;
         _stage = _PaymentStage.processing;
-        _recent.insert(0, _RecentPayment.fromDraft(draft, result.status));
       });
+      await _loadHistory(showError: false);
     } catch (error) {
       setState(() => _error = widget.api.messageFor(error));
     } finally {
@@ -481,10 +544,6 @@ class _DashboardScreenState extends State<_DashboardScreen> {
         setState(() => _busy = false);
       }
     }
-  }
-
-  void _finishSuccess() {
-    setState(() => _stage = _PaymentStage.success);
   }
 
   void _backHome() {
@@ -525,7 +584,6 @@ class _DashboardScreenState extends State<_DashboardScreen> {
         return _ProcessingScreen(
           draft: _draft!,
           result: _checkoutResult,
-          onDone: _finishSuccess,
           onHome: _backHome,
         );
       case _PaymentStage.success:
@@ -553,6 +611,7 @@ class _DashboardScreenState extends State<_DashboardScreen> {
                 : _HistoryScreen(
                     recent: _recent,
                     onBack: _backHome,
+                    onRefresh: _loadHistory,
                   ),
           ),
           bottomNavigationBar: _ShwapyBottomNav(
@@ -608,7 +667,7 @@ class _HomeDashboard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Good evening, $firstName',
+                      '${_greetingFor(DateTime.now())}, $firstName',
                       style: const TextStyle(
                         color: _ShwapyColors.text2,
                         fontSize: 13,
@@ -777,6 +836,7 @@ class _CameraScanScreenState extends State<_CameraScanScreen> {
   CameraController? _camera;
   bool _busy = false;
   String? _error;
+  String? _capturedPath;
 
   @override
   void initState() {
@@ -802,16 +862,28 @@ class _CameraScanScreenState extends State<_CameraScanScreen> {
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.jpeg,
     );
-    await camera.initialize();
+    try {
+      await camera.initialize();
+    } catch (error) {
+      await camera.dispose();
+      if (mounted) {
+        setState(() => _error = 'Could not start the camera. Please try again.');
+      }
+      return;
+    }
 
     if (mounted) {
-      setState(() => _camera = camera);
+      setState(() {
+        _camera = camera;
+        _capturedPath = null;
+      });
+    } else {
+      await camera.dispose();
     }
   }
 
   Future<void> _capture() async {
-    final camera = _camera;
-    if (camera == null || _busy) {
+    if (_busy) {
       return;
     }
 
@@ -821,8 +893,18 @@ class _CameraScanScreenState extends State<_CameraScanScreen> {
     });
 
     try {
-      final file = await camera.takePicture();
-      final prepared = await _processor.cropAndCompress(file.path);
+      var path = _capturedPath;
+      if (path == null) {
+        final camera = _camera;
+        if (camera == null || !camera.value.isInitialized) return;
+        final file = await camera.takePicture();
+        path = file.path;
+        _camera = null;
+        await camera.dispose();
+        if (mounted) setState(() => _capturedPath = path);
+      }
+
+      final prepared = await _processor.cropAndCompress(path);
       final details = await widget.extraction.extractImage(
         session: widget.session,
         image: prepared,
@@ -836,6 +918,15 @@ class _CameraScanScreenState extends State<_CameraScanScreen> {
         setState(() => _busy = false);
       }
     }
+  }
+
+  Future<void> _retake() async {
+    if (_busy) return;
+    setState(() {
+      _capturedPath = null;
+      _error = null;
+    });
+    await _initCamera();
   }
 
   @override
@@ -854,47 +945,100 @@ class _CameraScanScreenState extends State<_CameraScanScreen> {
           icon: const Icon(Icons.arrow_back),
         ),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: camera == null || !camera.value.isInitialized
-                ? const Center(child: CircularProgressIndicator())
-                : Stack(
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            Expanded(
+              child: _capturedPath != null
+                  ? Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.file(File(_capturedPath!), fit: BoxFit.cover),
+                        Container(color: Colors.black26),
+                        Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 14,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black87,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_busy)
+                                  const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                else
+                                  const Icon(
+                                    Icons.image_outlined,
+                                    color: Colors.white,
+                                  ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  _busy
+                                      ? 'Uploading and extracting...'
+                                      : 'Photo ready to retry',
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : camera == null || !camera.value.isInitialized
+                      ? const Center(child: CircularProgressIndicator())
+                      : Stack(
                     fit: StackFit.expand,
                     children: [
                       CameraPreview(camera),
                       const _CropOverlay(),
-                      if (_busy)
-                        Container(
-                          color: Colors.black38,
-                          alignment: Alignment.center,
-                          child: const CircularProgressIndicator(),
-                        ),
                     ],
                   ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Text(
-                      _error!,
-                      style: const TextStyle(color: Colors.red),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(color: Colors.redAccent),
+                      ),
+                    ),
+                  SizedBox(
+                    height: 56,
+                    child: FilledButton.icon(
+                      onPressed: _busy ? null : _capture,
+                      icon: const Icon(Icons.camera_alt),
+                      label: Text(_capturedPath != null
+                          ? 'Try extraction again'
+                          : 'Capture bill'),
                     ),
                   ),
-                FilledButton.icon(
-                  onPressed: _busy ? null : _capture,
-                  icon: const Icon(Icons.camera_alt),
-                  label: Text(_busy ? 'Extracting details...' : 'Capture bill'),
-                ),
-              ],
+                  if (_capturedPath != null && !_busy)
+                    TextButton(
+                      onPressed: _retake,
+                      child: const Text('Retake photo'),
+                    ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1256,17 +1400,18 @@ class _ProcessingScreen extends StatelessWidget {
   const _ProcessingScreen({
     required this.draft,
     required this.result,
-    required this.onDone,
     required this.onHome,
   });
 
   final _PaymentDraft draft;
   final _CheckoutResult? result;
-  final VoidCallback onDone;
   final VoidCallback onHome;
 
   @override
   Widget build(BuildContext context) {
+    final status = result?.status ?? 'processing';
+    final failed = ['failed', 'cancelled', 'timeout'].contains(status);
+
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -1288,14 +1433,18 @@ class _ProcessingScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
-                'Waiting for M-Pesa\nconfirmation',
+              Text(
+                failed
+                    ? 'Payment ${status == 'cancelled' ? 'cancelled' : 'not completed'}'
+                    : 'Waiting for M-Pesa\nconfirmation',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 10),
-              const Text(
-                'Check your phone for a prompt and enter your M-Pesa PIN.',
+              Text(
+                failed
+                    ? (result?.message ?? 'M-Pesa did not complete this payment.')
+                    : 'Check your phone for a prompt and enter your M-Pesa PIN. Status updates automatically.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: _ShwapyColors.text2, height: 1.5),
               ),
@@ -1306,12 +1455,13 @@ class _ProcessingScreen extends StatelessWidget {
               const SizedBox(height: 22),
               const _StepTile(done: true, label: 'Payment details confirmed'),
               _StepTile(done: true, label: result?.message ?? 'STK push sent'),
-              const _StepTile(done: false, label: 'Waiting for PIN entry...'),
-              const SizedBox(height: 22),
-              FilledButton(
-                onPressed: onDone,
-                child: const Text('Mark as complete'),
+              _StepTile(
+                done: failed,
+                label: failed
+                    ? 'M-Pesa status: $status'
+                    : 'Waiting for M-Pesa callback...',
               ),
+              const SizedBox(height: 22),
               TextButton(onPressed: onHome, child: const Text('Back home')),
             ],
           ),
@@ -1402,16 +1552,21 @@ class _HistoryScreen extends StatelessWidget {
   const _HistoryScreen({
     required this.recent,
     required this.onBack,
+    required this.onRefresh,
   });
 
   final List<_RecentPayment> recent;
   final VoidCallback onBack;
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: EdgeInsets.zero,
-      children: [
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        children: [
         Container(
           color: Colors.white,
           padding: const EdgeInsets.fromLTRB(8, 8, 20, 16),
@@ -1442,7 +1597,8 @@ class _HistoryScreen extends StatelessWidget {
                   ],
                 ),
         ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -1798,9 +1954,9 @@ class _TransactionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final success = payment.status.toLowerCase() == 'paid' ||
-        payment.status.toLowerCase() == 'completed';
-    final pending = payment.status.toLowerCase() == 'pending';
+    final success = payment.status.toLowerCase() == 'success';
+    final pending = ['pending', 'processing']
+        .contains(payment.status.toLowerCase());
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -1859,7 +2015,7 @@ class _TransactionTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  payment.status,
+                  _displayStatus(payment.status),
                   style: TextStyle(
                     color: success
                         ? _ShwapyColors.greenDark
@@ -2105,37 +2261,50 @@ class _EditableField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 94,
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: _ShwapyColors.text3,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+    final icon = switch (label) {
+      'Merchant' => Icons.storefront_outlined,
+      'Phone no.' => Icons.phone_outlined,
+      'Amount' => Icons.payments_outlined,
+      'Account no.' => Icons.tag,
+      _ => Icons.account_balance_outlined,
+    };
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        style: const TextStyle(
+          color: _ShwapyColors.text,
+          fontWeight: FontWeight.w700,
+          fontSize: 14,
+        ),
+        decoration: InputDecoration(
+          labelText: label,
+          filled: true,
+          fillColor: _ShwapyColors.surface,
+          prefixIcon: Icon(icon, size: 20, color: _ShwapyColors.greenDark),
+          suffixIcon: const Icon(
+            Icons.edit_outlined,
+            size: 17,
+            color: _ShwapyColors.text3,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _ShwapyColors.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(
+              color: _ShwapyColors.green,
+              width: 1.5,
             ),
           ),
         ),
-        Expanded(
-          child: TextField(
-            controller: controller,
-            keyboardType: keyboardType,
-            style: const TextStyle(
-              color: _ShwapyColors.greenDark,
-              fontFamily: 'DM Mono',
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-            ),
-            decoration: const InputDecoration(
-              isDense: true,
-              suffixIcon:
-                  Icon(Icons.edit, size: 16, color: _ShwapyColors.text3),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -2453,6 +2622,7 @@ class _CheckoutResult {
 
 class _RecentPayment {
   const _RecentPayment({
+    required this.id,
     required this.merchant,
     required this.accountType,
     required this.account,
@@ -2461,8 +2631,10 @@ class _RecentPayment {
     required this.initials,
     required this.accent,
     required this.background,
+    this.resultDescription,
   });
 
+  final Object? id;
   final String merchant;
   final String accountType;
   final String account;
@@ -2471,18 +2643,46 @@ class _RecentPayment {
   final String initials;
   final Color accent;
   final Color background;
+  final String? resultDescription;
+
+  factory _RecentPayment.fromJson(Map<String, dynamic> json) {
+    final account = Map<String, dynamic>.from(
+      json['payment_account'] as Map? ?? const {},
+    );
+    final type = account['type']?.toString() == 'paybill' ? 'paybill' : 'till';
+    final merchant = account['merchant_name']?.toString().trim() ?? '';
+    final visual = _RecentPayment.visualFor(merchant, type);
+
+    return _RecentPayment(
+      id: json['id'],
+      merchant: merchant.isEmpty ? 'Payment details' : merchant,
+      accountType: type == 'paybill' ? 'Paybill' : 'Till',
+      account: type == 'paybill'
+          ? (account['account_no']?.toString() ?? '-')
+          : (account['till_no']?.toString() ?? '-'),
+      amount: (json['amount'] as num?)?.toDouble() ??
+          double.tryParse(json['amount']?.toString() ?? '') ??
+          0,
+      status: json['status']?.toString() ?? 'pending',
+      initials: visual.initials,
+      accent: visual.accent,
+      background: visual.background,
+      resultDescription: json['result_description']?.toString(),
+    );
+  }
 
   factory _RecentPayment.fromDraft(_PaymentDraft draft, String status) {
     final type = draft.type == 'paybill' ? 'Paybill' : 'Till';
     final account = draft.type == 'paybill' ? draft.accountNo : draft.tillNo;
     final visual = _RecentPayment.visualFor(draft.merchantName, draft.type);
     return _RecentPayment(
+      id: null,
       merchant:
           draft.merchantName.isEmpty ? 'Payment details' : draft.merchantName,
       accountType: type,
       account: account.isEmpty ? '-' : account,
       amount: draft.amountNumber,
-      status: status == 'completed' ? 'Paid' : 'Pending',
+      status: status,
       initials: visual.initials,
       accent: visual.accent,
       background: visual.background,
@@ -2499,6 +2699,7 @@ class _RecentPayment {
         : words.take(2).map((word) => word[0].toUpperCase()).join();
 
     return _RecentPayment(
+      id: null,
       merchant: merchant,
       accountType: type,
       account: '',
@@ -2532,6 +2733,23 @@ String _formatAmount(double value) {
     }
   }
   return buffer.toString();
+}
+
+String _greetingFor(DateTime localTime) {
+  if (localTime.hour < 12) return 'Good morning';
+  if (localTime.hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+String _displayStatus(String status) {
+  return switch (status.toLowerCase()) {
+    'success' => 'Paid',
+    'processing' => 'Processing',
+    'cancelled' => 'Cancelled',
+    'timeout' => 'Timed out',
+    'failed' => 'Failed',
+    _ => 'Pending',
+  };
 }
 
 String _initialsFor(String value) {

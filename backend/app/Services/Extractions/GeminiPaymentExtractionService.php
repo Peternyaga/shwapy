@@ -10,7 +10,7 @@ use RuntimeException;
 
 class GeminiPaymentExtractionService implements PaymentExtractionService
 {
-    private const MAX_OUTPUT_TOKENS = 2048;
+    private const MAX_OUTPUT_TOKENS = 1024;
 
     public function __construct(private readonly PhoneNumberFormatter $phoneNumberFormatter)
     {
@@ -105,6 +105,7 @@ class GeminiPaymentExtractionService implements PaymentExtractionService
                 'temperature' => 0,
                 'maxOutputTokens' => self::MAX_OUTPUT_TOKENS,
                 'responseMimeType' => 'application/json',
+                'responseSchema' => $this->schema(),
             ],
         ];
     }
@@ -169,19 +170,23 @@ PROMPT;
                             'description' => 'Destination account type.',
                         ],
                         'paybill_no' => [
-                            'type' => ['string', 'null'],
+                            'type' => 'string',
+                            'nullable' => true,
                             'description' => 'Paybill/business number, only when explicitly present.',
                         ],
                         'account_no' => [
-                            'type' => ['string', 'null'],
+                            'type' => 'string',
+                            'nullable' => true,
                             'description' => 'Paybill account/reference number, only when explicitly present.',
                         ],
                         'till_no' => [
-                            'type' => ['string', 'null'],
+                            'type' => 'string',
+                            'nullable' => true,
                             'description' => 'Till number, only when explicitly present.',
                         ],
                         'merchant_name' => [
-                            'type' => ['string', 'null'],
+                            'type' => 'string',
+                            'nullable' => true,
                             'description' => 'Merchant or payee name, only when explicitly present.',
                         ],
                     ],
@@ -189,7 +194,8 @@ PROMPT;
                     'additionalProperties' => false,
                 ],
                 'amount' => [
-                    'type' => ['number', 'null'],
+                    'type' => 'number',
+                    'nullable' => true,
                     'description' => 'Payment amount. Null when not explicitly available.',
                 ],
                 'currency' => [
@@ -197,7 +203,8 @@ PROMPT;
                     'description' => 'Currency code, usually KES.',
                 ],
                 'phone_number' => [
-                    'type' => ['string', 'null'],
+                    'type' => 'string',
+                    'nullable' => true,
                     'description' => 'Payer phone number, only when explicitly available or supplied by the user.',
                 ],
                 'confidence' => [

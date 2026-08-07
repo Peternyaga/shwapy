@@ -80,19 +80,19 @@ Future<Uint8List> _process(Map<String, Object> input) async {
     height: cropH,
   );
   final longest = max(cropped.width, cropped.height);
-  final resized = longest > 1400
+  final resized = longest > 1200
       ? img.copyResize(
           cropped,
-          width: cropped.width >= cropped.height ? 1400 : null,
-          height: cropped.height > cropped.width ? 1400 : null,
+          width: cropped.width >= cropped.height ? 1200 : null,
+          height: cropped.height > cropped.width ? 1200 : null,
           interpolation: img.Interpolation.average,
         )
       : cropped;
 
-  var quality = 82;
+  var quality = 80;
   var encoded = Uint8List.fromList(img.encodeJpg(resized, quality: quality));
 
-  while (encoded.length > 520 * 1024 && quality > 52) {
+  while (encoded.length > 420 * 1024 && quality > 52) {
     quality -= 8;
     encoded = Uint8List.fromList(img.encodeJpg(resized, quality: quality));
   }

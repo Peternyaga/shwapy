@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import {
   AlertCircle,
@@ -10,6 +10,7 @@ import {
   LogIn,
   LogOut,
   ReceiptText,
+  RefreshCw,
   Send,
   ShieldCheck,
   Upload,
@@ -55,12 +56,51 @@ function App() {
   const [status, setStatus] = useState({ kind: 'idle', message: '' });
   const [busy, setBusy] = useState('');
   const [checkoutResult, setCheckoutResult] = useState(null);
+  const [payments, setPayments] = useState([]);
 
   const isAuthed = token.trim() !== '';
   const canExtract = isAuthed && (extractMode === 'text' ? textContent.trim() : file);
   const accountType = checkoutForm.payment_account.type;
 
   const missingFields = useMemo(() => extraction?.missing_fields || [], [extraction]);
+
+  useEffect(() => {
+    if (!isAuthed) {
+      setPayments([]);
+      return undefined;
+    }
+
+    let active = true;
+    const refresh = async () => {
+      try {
+        const payload = await api('/api/payments');
+        if (!active) return;
+        setPayments(payload.data || []);
+        setCheckoutResult((current) => {
+          if (!current) return current;
+          const updated = (payload.data || []).find(
+            (payment) => String(payment.id) === String(current.transaction_id),
+          );
+          return updated
+            ? {
+                ...current,
+                status: updated.status,
+                message: updated.result_description || current.message,
+              }
+            : current;
+        });
+      } catch {
+        // Keep the last known history and retry on the next poll.
+      }
+    };
+
+    refresh();
+    const timer = window.setInterval(refresh, 5000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [token]);
 
   async function api(path, options = {}) {
     const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -122,7 +162,10 @@ function App() {
       if (extractMode === 'text') {
         formData.append('content', textContent);
       } else {
-        formData.append('content', file);
+        formData.append(
+          'content',
+          extractMode === 'image' ? await optimizeImage(file) : file,
+        );
       }
 
       if (phoneHint.trim()) {
@@ -396,12 +439,46 @@ function App() {
       </section>
 
       {checkoutResult && (
-        <section className="checkout-result">
-          <CheckCircle2 size={22} />
+        <section className={`checkout-result status-${checkoutResult.status}`}>
+          {checkoutResult.status === 'success'
+            ? <CheckCircle2 size={22} />
+            : <RefreshCw className={['pending', 'processing'].includes(checkoutResult.status) ? 'spin' : ''} size={22} />}
           <div>
             <strong>{checkoutResult.message}</strong>
-            <span>Transaction #{checkoutResult.transaction_id} · {checkoutResult.status}</span>
+            <span>Transaction #{checkoutResult.transaction_id} · {displayStatus(checkoutResult.status)}</span>
           </div>
+        </section>
+      )}
+
+      {isAuthed && (
+        <section className="history-panel">
+          <div className="panel-heading">
+            <ReceiptText size={20} />
+            <h2>Payment history</h2>
+            <span className="live-pill">Live</span>
+          </div>
+          {payments.length === 0 ? (
+            <p className="history-empty">No backend payments yet.</p>
+          ) : (
+            <div className="history-list">
+              {payments.map((payment) => (
+                <article className="history-item" key={payment.id}>
+                  <div>
+                    <strong>{payment.payment_account.merchant_name || 'Payment details'}</strong>
+                    <span>
+                      {payment.payment_account.type === 'paybill' ? 'Paybill' : 'Till'} · #{payment.id}
+                    </span>
+                  </div>
+                  <div className="history-amount">
+                    <strong>KES {Number(payment.amount).toLocaleString()}</strong>
+                    <span className={`payment-status status-${payment.status}`}>
+                      {displayStatus(payment.status)}
+                    </span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
       )}
     </main>
@@ -457,6 +534,45 @@ function Metric({ label, value }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function displayStatus(status = '') {
+  return ({
+    success: 'Paid',
+    processing: 'Processing',
+    pending: 'Pending',
+    failed: 'Failed',
+    cancelled: 'Cancelled',
+    timeout: 'Timed out',
+  })[status] || status;
+}
+
+async function optimizeImage(file) {
+  if (!file || !file.type.startsWith('image/')) return file;
+  if (typeof createImageBitmap !== 'function') return file;
+  const bitmap = await createImageBitmap(file);
+  const longest = Math.max(bitmap.width, bitmap.height);
+  if (longest <= 1600 && file.size <= 700 * 1024) {
+    bitmap.close();
+    return file;
+  }
+
+  const scale = Math.min(1, 1600 / longest);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const context = canvas.getContext('2d');
+  if (!context) {
+    bitmap.close();
+    return file;
+  }
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+  return blob
+    ? new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' })
+    : file;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
