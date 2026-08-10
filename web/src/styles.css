@@ -421,6 +421,24 @@ h2 {
   align-items: flex-end;
 }
 
+.repeat-payment-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #28735c;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 800;
+  gap: 5px;
+  margin-top: 4px;
+  padding: 4px 0;
+}
+
+.repeat-payment-button:hover {
+  color: #174f3e;
+  text-decoration: underline;
+}
+
 .payment-status {
   border-radius: 999px;
   font-weight: 800;

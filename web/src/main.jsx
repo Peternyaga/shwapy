@@ -263,6 +263,44 @@ function App() {
     }));
   }
 
+  function repeatPayment(payment) {
+    const account = payment.payment_account;
+    const savedExtraction = {
+      payment_account: { ...account },
+      amount: Number(payment.amount),
+      currency: payment.currency || 'KES',
+      phone_number: payment.phone_number || authForm.phone_number,
+      confidence: null,
+      missing_fields: [],
+      warnings: [],
+    };
+
+    setExtraction(savedExtraction);
+    setCheckoutForm({
+      payment_account: {
+        type: account.type === 'paybill' ? 'paybill' : 'till',
+        paybill_no: account.paybill_no || '',
+        account_no: account.account_no || '',
+        till_no: account.till_no || '',
+        merchant_name: account.merchant_name || '',
+      },
+      amount: payment.amount,
+      phone_number: payment.phone_number || authForm.phone_number,
+      extraction_confidence: null,
+    });
+    setCheckoutResult(null);
+    setStatus({
+      kind: 'success',
+      message: 'Saved payment loaded. Review the details before paying again.',
+    });
+    window.requestAnimationFrame(() => {
+      document.querySelector('.review-panel')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    });
+  }
+
   return (
     <main className="app-shell">
       <section className="topbar">
@@ -387,7 +425,12 @@ function App() {
           {extraction ? (
             <form onSubmit={handleCheckout} className="stack">
               <div className="result-strip">
-                <Metric label="Confidence" value={`${Math.round((extraction.confidence || 0) * 100)}%`} />
+                <Metric
+                  label="Source"
+                  value={extraction.confidence == null
+                    ? 'Saved payment'
+                    : `${Math.round(extraction.confidence * 100)}% confidence`}
+                />
                 <Metric label="Currency" value={extraction.currency || 'KES'} />
                 <Metric label="Missing" value={missingFields.length || 'None'} />
               </div>
@@ -474,6 +517,16 @@ function App() {
                     <span className={`payment-status status-${payment.status}`}>
                       {displayStatus(payment.status)}
                     </span>
+                    {!['pending', 'processing'].includes(payment.status) && (
+                      <button
+                        className="repeat-payment-button"
+                        type="button"
+                        onClick={() => repeatPayment(payment)}
+                      >
+                        <RefreshCw size={15} />
+                        Pay again
+                      </button>
+                    )}
                   </div>
                 </article>
               ))}

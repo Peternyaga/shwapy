@@ -472,6 +472,16 @@ class _DashboardScreenState extends State<_DashboardScreen> {
     });
   }
 
+  void _repeatPayment(_RecentPayment payment) {
+    setState(() {
+      _draft = _PaymentDraft.fromRecent(payment, widget.session);
+      _stage = _PaymentStage.confirm;
+      _tab = _DashboardTab.home;
+      _checkoutResult = null;
+      _error = null;
+    });
+  }
+
   Future<void> _showProfile() async {
     final nextImagePath = await showModalBottomSheet<String?>(
       context: context,
@@ -612,6 +622,7 @@ class _DashboardScreenState extends State<_DashboardScreen> {
                     recent: _recent,
                     onBack: _backHome,
                     onRefresh: _loadHistory,
+                    onPayAgain: _repeatPayment,
                   ),
           ),
           bottomNavigationBar: _ShwapyBottomNav(
@@ -1438,7 +1449,10 @@ class _ProcessingScreen extends StatelessWidget {
                     ? 'Payment ${status == 'cancelled' ? 'cancelled' : 'not completed'}'
                     : 'Waiting for M-Pesa\nconfirmation',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               const SizedBox(height: 10),
               Text(
@@ -1446,7 +1460,10 @@ class _ProcessingScreen extends StatelessWidget {
                     ? (result?.message ?? 'M-Pesa did not complete this payment.')
                     : 'Check your phone for a prompt and enter your M-Pesa PIN. Status updates automatically.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: _ShwapyColors.text2, height: 1.5),
+                style: const TextStyle(
+                  color: _ShwapyColors.text2,
+                  height: 1.5,
+                ),
               ),
               const SizedBox(height: 16),
               _MonoChip(draft.phoneNumber),
@@ -1553,11 +1570,13 @@ class _HistoryScreen extends StatelessWidget {
     required this.recent,
     required this.onBack,
     required this.onRefresh,
+    required this.onPayAgain,
   });
 
   final List<_RecentPayment> recent;
   final VoidCallback onBack;
   final Future<void> Function() onRefresh;
+  final ValueChanged<_RecentPayment> onPayAgain;
 
   @override
   Widget build(BuildContext context) {
@@ -1591,7 +1610,13 @@ class _HistoryScreen extends StatelessWidget {
               : Column(
                   children: [
                     for (final item in recent) ...[
-                      _TransactionTile(payment: item),
+                      _TransactionTile(
+                        payment: item,
+                        onPayAgain: ['pending', 'processing']
+                                .contains(item.status.toLowerCase())
+                            ? null
+                            : () => onPayAgain(item),
+                      ),
                       const SizedBox(height: 8),
                     ],
                   ],
@@ -1948,9 +1973,10 @@ class _EmptyPaymentsState extends StatelessWidget {
 }
 
 class _TransactionTile extends StatelessWidget {
-  const _TransactionTile({required this.payment});
+  const _TransactionTile({required this.payment, this.onPayAgain});
 
   final _RecentPayment payment;
+  final VoidCallback? onPayAgain;
 
   @override
   Widget build(BuildContext context) {
@@ -1961,74 +1987,95 @@ class _TransactionTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: _cardDecoration(),
-      child: Row(
+      child: Column(
         children: [
-          _InitialsAvatar(payment: payment),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  payment.merchant,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: _ShwapyColors.text,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                Text(
-                  '${payment.accountType} · ${payment.account}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: _ShwapyColors.text3,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          Row(
             children: [
-              Text(
-                'Ksh ${_formatAmount(payment.amount)}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: _ShwapyColors.text,
-                  fontWeight: FontWeight.w800,
+              _InitialsAvatar(payment: payment),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      payment.merchant,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: _ShwapyColors.text,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      '${payment.accountType} · ${payment.account}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _ShwapyColors.text3,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              Container(
-                margin: const EdgeInsets.only(top: 3),
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: success
-                      ? _ShwapyColors.greenLight
-                      : pending
-                          ? const Color(0xFFFFF8E6)
-                          : const Color(0xFFFEF2F2),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  _displayStatus(payment.status),
-                  style: TextStyle(
-                    color: success
-                        ? _ShwapyColors.greenDark
-                        : pending
-                            ? const Color(0xFF92600A)
-                            : const Color(0xFF991B1B),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'Ksh ${_formatAmount(payment.amount)}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: _ShwapyColors.text,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
+                  Container(
+                    margin: const EdgeInsets.only(top: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: success
+                          ? _ShwapyColors.greenLight
+                          : pending
+                              ? const Color(0xFFFFF8E6)
+                              : const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      _displayStatus(payment.status),
+                      style: TextStyle(
+                        color: success
+                            ? _ShwapyColors.greenDark
+                            : pending
+                                ? const Color(0xFF92600A)
+                                : const Color(0xFF991B1B),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
+          if (onPayAgain != null) ...[
+            const Divider(height: 18),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: onPayAgain,
+                icon: const Icon(Icons.replay, size: 18),
+                label: const Text('Pay again'),
+                style: TextButton.styleFrom(
+                  foregroundColor: _ShwapyColors.greenDark,
+                  minimumSize: const Size(0, 36),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -2538,6 +2585,27 @@ class _PaymentDraft {
     );
   }
 
+  factory _PaymentDraft.fromRecent(
+    _RecentPayment payment,
+    AuthSession session,
+  ) {
+    return _PaymentDraft(
+      type: payment.type,
+      paybillNo: payment.paybillNo,
+      accountNo: payment.accountNo,
+      tillNo: payment.tillNo,
+      merchantName:
+          payment.merchant == 'Payment details' ? '' : payment.merchant,
+      amount: payment.amount.toStringAsFixed(0),
+      phoneNumber: payment.phoneNumber.isNotEmpty
+          ? payment.phoneNumber
+          : session.user.phoneNumber ?? '',
+      confidence: 0,
+      rawExtraction: const {},
+      missingFields: const [],
+    );
+  }
+
   _PaymentDraft copyWith({
     String? type,
     String? paybillNo,
@@ -2631,6 +2699,11 @@ class _RecentPayment {
     required this.initials,
     required this.accent,
     required this.background,
+    this.type = 'till',
+    this.paybillNo = '',
+    this.accountNo = '',
+    this.tillNo = '',
+    this.phoneNumber = '',
     this.resultDescription,
   });
 
@@ -2643,6 +2716,11 @@ class _RecentPayment {
   final String initials;
   final Color accent;
   final Color background;
+  final String type;
+  final String paybillNo;
+  final String accountNo;
+  final String tillNo;
+  final String phoneNumber;
   final String? resultDescription;
 
   factory _RecentPayment.fromJson(Map<String, dynamic> json) {
@@ -2667,25 +2745,12 @@ class _RecentPayment {
       initials: visual.initials,
       accent: visual.accent,
       background: visual.background,
+      type: type,
+      paybillNo: account['paybill_no']?.toString() ?? '',
+      accountNo: account['account_no']?.toString() ?? '',
+      tillNo: account['till_no']?.toString() ?? '',
+      phoneNumber: json['phone_number']?.toString() ?? '',
       resultDescription: json['result_description']?.toString(),
-    );
-  }
-
-  factory _RecentPayment.fromDraft(_PaymentDraft draft, String status) {
-    final type = draft.type == 'paybill' ? 'Paybill' : 'Till';
-    final account = draft.type == 'paybill' ? draft.accountNo : draft.tillNo;
-    final visual = _RecentPayment.visualFor(draft.merchantName, draft.type);
-    return _RecentPayment(
-      id: null,
-      merchant:
-          draft.merchantName.isEmpty ? 'Payment details' : draft.merchantName,
-      accountType: type,
-      account: account.isEmpty ? '-' : account,
-      amount: draft.amountNumber,
-      status: status,
-      initials: visual.initials,
-      accent: visual.accent,
-      background: visual.background,
     );
   }
 
