@@ -18,7 +18,6 @@ class MpesaStkPushService
      */
     public function initiate(Transaction $transaction, PaymentAccount $paymentAccount, string $phoneNumber, float $amount): array
     {
-        $token = $this->mpesaAuthService->getAccessToken();
         $timestamp = now()->format('YmdHis');
         $shortCode = (string) config('services.mpesa.shortcode');
         $passkey = (string) config('services.mpesa.passkey');
@@ -32,14 +31,17 @@ class MpesaStkPushService
             ? 'CustomerBuyGoodsOnline'
             : 'CustomerPayBillOnline';
 
-        $partyB = $paymentAccount->type === 'till'
+        $destinationShortCode = $paymentAccount->type === 'till'
             ? $paymentAccount->till_no
             : $paymentAccount->paybill_no;
 
-        if (! $partyB) {
+        if (! $destinationShortCode) {
             throw new RuntimeException('Missing destination business shortcode.');
         }
 
+        $destinationShortCode = (string) $destinationShortCode;
+
+        $token = $this->mpesaAuthService->getAccessToken();
         $password = base64_encode($shortCode.$passkey.$timestamp);
         $endpoint = config('services.mpesa.env') === 'live'
             ? 'https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest'
@@ -52,7 +54,7 @@ class MpesaStkPushService
             'TransactionType' => $transactionType,
             'Amount' => (int) round($amount),
             'PartyA' => $phoneNumber,
-            'PartyB' => $partyB,
+            'PartyB' => $destinationShortCode,
             'PhoneNumber' => $phoneNumber,
             'CallBackURL' => $callbackUrl,
             'AccountReference' => $paymentAccount->account_no ?? ($paymentAccount->merchant_name ?: 'Shwapy'),

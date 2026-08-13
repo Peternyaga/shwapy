@@ -22,7 +22,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->middleware('throttle:30,1');
     Route::post('payments/checkout', [CheckoutController::class, 'store']);
     Route::get('payments', [TransactionController::class, 'index']);
-    Route::get('payments/{transaction}', [TransactionController::class, 'show']);
+    Route::get('payments/{transaction}', [TransactionController::class, 'show'])
+        ->whereNumber('transaction');
 });
 
 Route::post('payments/callback', [MpesaCallbackController::class, 'store']);

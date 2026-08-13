@@ -10,7 +10,7 @@ use RuntimeException;
 
 class GeminiPaymentExtractionService implements PaymentExtractionService
 {
-    private const MAX_OUTPUT_TOKENS = 1024;
+    private const MAX_OUTPUT_TOKENS = 2048;
 
     public function __construct(private readonly PhoneNumberFormatter $phoneNumberFormatter)
     {
@@ -49,6 +49,10 @@ class GeminiPaymentExtractionService implements PaymentExtractionService
         }
 
         $text = $this->candidateText($response->json());
+
+        if (data_get($response->json(), 'candidates.0.finishReason') === 'MAX_TOKENS') {
+            throw new RuntimeException('Gemini extraction response was truncated at the output token limit.');
+        }
 
         if ($text === '') {
             throw new RuntimeException('Gemini extraction response was empty.');
@@ -104,6 +108,9 @@ class GeminiPaymentExtractionService implements PaymentExtractionService
             'generationConfig' => [
                 'temperature' => 0,
                 'maxOutputTokens' => self::MAX_OUTPUT_TOKENS,
+                'thinkingConfig' => [
+                    'thinkingBudget' => 0,
+                ],
                 'responseMimeType' => 'application/json',
                 'responseSchema' => $this->schema(),
             ],
@@ -191,7 +198,6 @@ PROMPT;
                         ],
                     ],
                     'required' => ['type', 'paybill_no', 'account_no', 'till_no', 'merchant_name'],
-                    'additionalProperties' => false,
                 ],
                 'amount' => [
                     'type' => 'number',
@@ -225,7 +231,6 @@ PROMPT;
                 ],
             ],
             'required' => ['payment_account', 'amount', 'currency', 'phone_number', 'confidence', 'missing_fields', 'warnings'],
-            'additionalProperties' => false,
         ];
     }
 

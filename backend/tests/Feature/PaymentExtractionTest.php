@@ -66,7 +66,11 @@ class PaymentExtractionTest extends TestCase
             ->assertJsonPath('data.missing_fields.0', 'amount');
 
         Http::assertSent(fn ($request): bool => $request->hasHeader('x-goog-api-key', 'test-key')
-            && data_get($request->data(), 'generationConfig.responseMimeType') === 'application/json');
+            && data_get($request->data(), 'generationConfig.responseMimeType') === 'application/json'
+            && data_get($request->data(), 'generationConfig.maxOutputTokens') === 2048
+            && data_get($request->data(), 'generationConfig.thinkingConfig.thinkingBudget') === 0
+            && data_get($request->data(), 'generationConfig.responseSchema.additionalProperties') === null
+            && data_get($request->data(), 'generationConfig.responseSchema.properties.payment_account.additionalProperties') === null);
     }
 
     public function test_authenticated_user_can_extract_image_content(): void

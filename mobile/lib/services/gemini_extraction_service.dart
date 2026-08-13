@@ -81,7 +81,10 @@ class GeminiExtractionService {
       ],
       'generationConfig': {
         'temperature': 0,
-        'maxOutputTokens': 768,
+        'maxOutputTokens': 2048,
+        'thinkingConfig': {
+          'thinkingBudget': 0,
+        },
         'responseMimeType': 'application/json',
         'responseSchema': _responseSchema,
       },

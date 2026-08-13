@@ -17,8 +17,8 @@ return [
     ],
 
     'allowed_origins_patterns' => [
-        'http://192\.168\.\d+\.\d+:5173',
-        'http://10\.\d+\.\d+\.\d+:5173',
+        '/^http:\/\/192\.168\.\d+\.\d+:5173$/',
+        '/^http:\/\/10\.\d+\.\d+\.\d+:5173$/',
     ],
 
     'allowed_headers' => ['*'],
